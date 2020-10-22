@@ -5,8 +5,14 @@
 # These configuration files will be loaded in order, replacing values in files
 # loaded earlier with those loaded later in the chain. The file itself will
 # always be loaded last.
+#
+# Imports can be defined as `optional`. Optional paths will be skipped if they
+# are not found. Any path that is not explicitly marked as `optional` will
+# will output an error if not found.
 #import:
 #  - /path/to/alacritty.yml
+#  - path: /path/to/another/config.yaml
+#    optional: true
 
 # Any items in the `env` entry below will be added as
 # environment variables. Some entries may override variables

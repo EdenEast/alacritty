@@ -211,8 +211,40 @@ fn load_imports(config: &Value, config_paths: &mut Vec<PathBuf>, recursion_limit
     let mut merged = Value::Null;
 
     for import in imports {
-        let path = match import {
-            Value::String(path) => PathBuf::from(path),
+        let (path, optional) = match import {
+            Value::String(path) => (PathBuf::from(path), false),
+            Value::Mapping(map) => {
+                let path = match map.get(&Value::String("path".into())) {
+                    Some(Value::String(path)) => PathBuf::from(path),
+                    None => {
+                        error!(
+                            target: LOG_TARGET_CONFIG,
+                            "Invalid import type: expected path value"
+                        );
+                        continue;
+                    },
+                    _ => {
+                        error!(
+                            target: LOG_TARGET_CONFIG,
+                            "Invalid import element type: string expected for path"
+                        );
+                        continue;
+                    },
+                };
+
+                let optional = match map.get(&Value::String("optional".into())) {
+                    Some(Value::Bool(value)) => value.clone(),
+                    None => false,
+                    _ => {
+                        error!(
+                            target: LOG_TARGET_CONFIG,
+                            "Invalid import element type: expected bool for optional value"
+                        );
+                        continue;
+                    },
+                };
+                (path, optional)
+            },
             _ => {
                 error!(
                     target: LOG_TARGET_CONFIG,
@@ -221,6 +253,24 @@ fn load_imports(config: &Value, config_paths: &mut Vec<PathBuf>, recursion_limit
                 continue;
             },
         };
+
+        if !path.exists() {
+            if optional {
+                info!(
+                    target: LOG_TARGET_CONFIG,
+                    "Import path: {} does not exist. Skipping because it is marked as optional",
+                    path.display()
+                );
+                continue;
+            } else {
+                error!(
+                    target: LOG_TARGET_CONFIG,
+                    "Import path: {} does not exist and is not marked as optional",
+                    path.display()
+                );
+                continue;
+            }
+        }
 
         match parse_config(&path, config_paths, recursion_limit - 1) {
             Ok(config) => merged = serde_utils::merge(merged, config),
