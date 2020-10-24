@@ -212,12 +212,20 @@ fn load_imports(config: &Value, config_paths: &mut Vec<PathBuf>, recursion_limit
 
     for import in imports {
         let path = match import {
-            Value::String(path) => PathBuf::from(path),
+            Value::String(path) => path,
             _ => {
                 error!(
                     target: LOG_TARGET_CONFIG,
                     "Invalid import element type: expected path string"
                 );
+                continue;
+            },
+        };
+
+        let path = match expand_import(path) {
+            Some(path) => path,
+            None => {
+                error!(target: LOG_TARGET_CONFIG, "Failed to find $HOME and expand '~'");
                 continue;
             },
         };
@@ -231,6 +239,16 @@ fn load_imports(config: &Value, config_paths: &mut Vec<PathBuf>, recursion_limit
     }
 
     merged
+}
+
+/// Expand paths starting with `~` into home directory path
+fn expand_import(path: &str) -> Option<PathBuf> {
+    if path.starts_with("~/") {
+        return dirs::home_dir()
+            .map(|home| home.join(path.strip_prefix("~/").expect("Stripping '~'")));
+    }
+
+    Some(PathBuf::from(path))
 }
 
 /// Get the location of the first found default config file paths
