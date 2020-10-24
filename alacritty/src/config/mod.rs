@@ -212,10 +212,10 @@ fn load_imports(config: &Value, config_paths: &mut Vec<PathBuf>, recursion_limit
 
     for import in imports {
         let (path, optional) = match import {
-            Value::String(path) => (PathBuf::from(path), false),
+            Value::String(path) => (path, false),
             Value::Mapping(map) => {
                 let path = match map.get(&Value::String("path".into())) {
-                    Some(Value::String(path)) => PathBuf::from(path),
+                    Some(Value::String(path)) => path,
                     None => {
                         error!(
                             target: LOG_TARGET_CONFIG,
@@ -254,6 +254,14 @@ fn load_imports(config: &Value, config_paths: &mut Vec<PathBuf>, recursion_limit
             },
         };
 
+        let path = match expand_import(path) {
+            Some(path) => path,
+            None => {
+                error!(target: LOG_TARGET_CONFIG, "Failed to find $HOME and expand '~'");
+                continue;
+            },
+        };
+
         if !path.exists() {
             if optional {
                 info!(
@@ -272,7 +280,7 @@ fn load_imports(config: &Value, config_paths: &mut Vec<PathBuf>, recursion_limit
             }
         }
 
-        match parse_config(&path, config_paths, recursion_limit - 1) {
+       match parse_config(&path, config_paths, recursion_limit - 1) {
             Ok(config) => merged = serde_utils::merge(merged, config),
             Err(err) => {
                 error!(target: LOG_TARGET_CONFIG, "Unable to import config {:?}: {}", path, err)
@@ -281,6 +289,16 @@ fn load_imports(config: &Value, config_paths: &mut Vec<PathBuf>, recursion_limit
     }
 
     merged
+}
+
+/// Expand paths starting with `~` into home directory path
+fn expand_import(path: &str) -> Option<PathBuf> {
+    if path.starts_with("~/") {
+        return dirs::home_dir()
+            .map(|home| home.join(path.strip_prefix("~/").expect("Stripping '~'")));
+    }
+
+    Some(PathBuf::from(path))
 }
 
 /// Get the location of the first found default config file paths
